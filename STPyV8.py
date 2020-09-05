@@ -12,7 +12,7 @@ import collections.abc
 import functools
 import json
 
-import _STPyV8
+from STPyV8 import _STPyV8
 
 __version__ = '0.1'
 
@@ -28,6 +28,7 @@ __all__ = ["ReadOnly",
            "JSFunction",
            "JSClass",
            "JSEngine",
+           "JSExtension",           
            "JSContext",
            "JSIsolate",
            "JSStackTrace",
@@ -116,6 +117,11 @@ JSUndefined = _STPyV8.JSUndefined
 JSArray     = _STPyV8.JSArray
 JSFunction  = _STPyV8.JSFunction
 JSPlatform  = _STPyV8.JSPlatform
+
+
+class JSExtension(_STPyV8.JSExtension):
+    def __init__(self, name, source, callback=None, dependencies=[], register=True):
+        _STPyV8.JSExtension.__init__(self, name, source, callback, dependencies, register)
 
 
 class JSLocker(_STPyV8.JSLocker):
@@ -249,8 +255,17 @@ class JSClassPrototype(JSClass):
     def name(self):
         return self.cls.__name__
 
+class Version(collections.namedtuple('Version', ['major', 'minor', 'patch'] )):
+    def __str__(self):
+        return "{major}.{minor}.{patch}".format(**self._asdict())
 
 class JSEngine(_STPyV8.JSEngine):
+
+    v8_version = Version(*_STPyV8.JSEngine.version.split('.')[:3])
+    boost_version = Version(_STPyV8.JSEngine.boost / 100000,
+                            _STPyV8.JSEngine.boost / 100 % 1000,
+                            _STPyV8.JSEngine.boost % 100)
+
     def __init__(self):
         _STPyV8.JSEngine.__init__(self)
 

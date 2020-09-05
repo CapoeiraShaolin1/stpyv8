@@ -33,9 +33,15 @@ void CContext::Expose(void)
 
     py::class_<CContext, boost::noncopyable>("JSContext", "JSContext is an execution context.", py::no_init)
     .def(py::init<const CContext&>("Create a new context based on a existing context"))
+#if SUPPORT_EXTENSION
+    .def(py::init<py::object, py::list>((py::arg("global") = py::object(),
+                                           py::arg("extensions") = py::list()),
+                                           "Create a new context based on global object"))
+#else        
     .def(py::init<py::object>((py::arg("global") = py::object()),
                               "Create a new context based on global object"))
-
+#endif // SUPPORT_EXTENSION
+        
     .add_property("securityToken", &CContext::GetSecurityToken, &CContext::SetSecurityToken)
 
     .add_property("locals", &CContext::GetGlobal, "Local variables within context")
@@ -95,9 +101,37 @@ CContext::CContext(const CContext& context)
     m_context.Reset(context.Handle()->GetIsolate(), context.Handle());
 }
 
-CContext::CContext(py::object global)
+CContext::CContext(py::object global
+#if SUPPORT_EXTENSION
+                   , py::list extensions
+#endif // SUPPORT_EXTENSION
+)
     : m_global(global)
 {
+#if SUPPORT_EXTENSION
+    // std::auto_ptr<v8::ExtensionConfiguration> cfg;
+    std::unique_ptr<v8::ExtensionConfiguration> cfg;
+    std::vector<std::string> ext_names;
+    std::vector<const char *> ext_ptrs;
+
+    for (Py_ssize_t i=0; i<PyList_Size(extensions.ptr()); i++)
+    {
+      py::extract<const std::string> extractor(::PyList_GetItem(extensions.ptr(), i));
+
+      if (extractor.check())
+      {
+        ext_names.push_back(extractor());
+      }
+    }
+
+    for (size_t i=0; i<ext_names.size(); i++)
+    {
+      ext_ptrs.push_back(ext_names[i].c_str());
+    }
+
+    if (!ext_ptrs.empty()) cfg.reset(new v8::ExtensionConfiguration(ext_ptrs.size(), &ext_ptrs[0]));
+#endif // SUPPORT_EXTENSION    
+
     v8::Isolate* isolate = v8::Isolate::GetCurrent();
     v8::HandleScope handle_scope(isolate);
 

@@ -14,7 +14,8 @@ void CEngine::Expose(void)
     .def(py::init<>("Create a new script engine instance."))
     .add_static_property("version", &CEngine::GetVersion,
                          "Get the V8 engine version.")
-
+    .add_static_property("boost", &CEngine::GetBoostVersion,
+                         "Get the boost version.")
     .add_static_property("dead", &CEngine::IsDead,
                          "Check if V8 is dead and therefore unusable.")
 
@@ -79,6 +80,28 @@ void CEngine::Expose(void)
     py::objects::class_value_wrapper<std::shared_ptr<CScript>,
     py::objects::make_ptr_instance<CScript,
     py::objects::pointer_holder<std::shared_ptr<CScript>, CScript> > >();
+
+#if SUPPORT_EXTENSION
+
+    py::class_<CExtension, boost::noncopyable>("JSExtension", "JSExtension is a reusable script module.", py::no_init)
+    .def(py::init<const std::string&, const std::string&, py::object, py::list, bool>((py::arg("name"),
+                                                                                       py::arg("source"),
+                                                                                       py::arg("callback") = py::object(),
+                                                                                       py::arg("dependencies") = py::list(),
+                                                                                       py::arg("register") = true)))
+    .add_static_property("extensions", &CExtension::GetExtensions)
+
+    .add_property("name", &CExtension::GetName, "The name of extension")
+    .add_property("source", &CExtension::GetSource, "The source code of extension")
+    .add_property("dependencies", &CExtension::GetDependencies, "The extension dependencies which will be load before this extension")
+
+    .add_property("autoEnable", &CExtension::IsAutoEnable, &CExtension::SetAutoEnable, "Enable the extension by default.")
+
+    .add_property("registered", &CExtension::IsRegistered, "The extension has been registerd")
+    .def("register", &CExtension::Register, "Register the extension")
+    ;
+
+#endif // SUPPORT_EXTENSION    
 }
 
 bool CEngine::IsDead(void)
@@ -225,3 +248,154 @@ py::object CScript::Run(void)
 
     return m_engine.ExecuteScript(Script());
 }
+
+#if SUPPORT_EXTENSION
+
+class CPythonExtension : public v8::Extension
+{
+  py::object m_callback;
+
+  static void CallStub(const v8::FunctionCallbackInfo<v8::Value>& args)
+  {
+    v8::HandleScope handle_scope(args.GetIsolate());
+    CPythonGIL python_gil;
+    py::object func = *static_cast<py::object *>(v8::External::Cast(*args.Data())->Value());
+
+    py::object result;
+
+    switch (args.Length())
+    {
+    case 0: result = func(); break;
+    case 1: result = func(CJavascriptObject::Wrap(args[0])); break;
+    case 2: result = func(CJavascriptObject::Wrap(args[0]), CJavascriptObject::Wrap(args[1])); break;
+    case 3: result = func(CJavascriptObject::Wrap(args[0]), CJavascriptObject::Wrap(args[1]),
+                          CJavascriptObject::Wrap(args[2])); break;
+    case 4: result = func(CJavascriptObject::Wrap(args[0]), CJavascriptObject::Wrap(args[1]),
+                          CJavascriptObject::Wrap(args[2]), CJavascriptObject::Wrap(args[3])); break;
+    case 5: result = func(CJavascriptObject::Wrap(args[0]), CJavascriptObject::Wrap(args[1]),
+                          CJavascriptObject::Wrap(args[2]), CJavascriptObject::Wrap(args[3]),
+                          CJavascriptObject::Wrap(args[4])); break;
+    case 6: result = func(CJavascriptObject::Wrap(args[0]), CJavascriptObject::Wrap(args[1]),
+                          CJavascriptObject::Wrap(args[2]), CJavascriptObject::Wrap(args[3]),
+                          CJavascriptObject::Wrap(args[4]), CJavascriptObject::Wrap(args[5])); break;
+    case 7: result = func(CJavascriptObject::Wrap(args[0]), CJavascriptObject::Wrap(args[1]),
+                          CJavascriptObject::Wrap(args[2]), CJavascriptObject::Wrap(args[3]),
+                          CJavascriptObject::Wrap(args[4]), CJavascriptObject::Wrap(args[5]),
+                          CJavascriptObject::Wrap(args[6])); break;
+    case 8: result = func(CJavascriptObject::Wrap(args[0]), CJavascriptObject::Wrap(args[1]),
+                          CJavascriptObject::Wrap(args[2]), CJavascriptObject::Wrap(args[3]),
+                          CJavascriptObject::Wrap(args[4]), CJavascriptObject::Wrap(args[5]),
+                          CJavascriptObject::Wrap(args[7]), CJavascriptObject::Wrap(args[8])); break;
+    default:
+      // args.GetIsolate()->ThrowException(v8::Exception::Error(v8::String::NewFromUtf8(args.GetIsolate(), "too many arguments")));
+      args.GetIsolate()->ThrowException(v8::Exception::Error(v8::String::NewFromUtf8(args.GetIsolate(), "too many arguments").ToLocalChecked()));
+      break;
+    }
+
+    if (result.is_none()) {
+      args.GetReturnValue().SetNull();
+    } else if (result.ptr() == Py_True) {
+      args.GetReturnValue().Set(true);
+    } else if (result.ptr() == Py_False) {
+      args.GetReturnValue().Set(false);
+    } else {
+      args.GetReturnValue().Set(CPythonObject::Wrap(result));
+    }
+  }
+public:
+  CPythonExtension(const char *name, const char *source, py::object callback, int dep_count, const char**deps)
+    : v8::Extension(strdup(name), strdup(source), dep_count, deps), m_callback(callback)
+  {
+
+  }
+
+  virtual v8::Handle<v8::FunctionTemplate> GetNativeFunctionTemplate(v8::Isolate* isolate, v8::Handle<v8::String> name)
+  {
+    v8::EscapableHandleScope handle_scope(isolate);
+    CPythonGIL python_gil;
+
+    py::object func;
+    // v8::String::Utf8Value func_name(name);
+    v8::String::Utf8Value func_name(isolate, name);
+    std::string func_name_str(*func_name, func_name.length());
+
+    try
+    {
+      if (::PyCallable_Check(m_callback.ptr()))
+      {
+        func = m_callback(func_name_str);
+      }
+      else if (::PyObject_HasAttrString(m_callback.ptr(), *func_name))
+      {
+        func = m_callback.attr(func_name_str.c_str());
+      }
+      else
+      {
+        return v8::Handle<v8::FunctionTemplate>();
+      }
+    }
+    // catch (const std::exception& ex) { isolate->ThrowException(v8::Exception::Error(v8::String::NewFromUtf8(isolate, ex.what()))); }
+    catch (const std::exception& ex) { isolate->ThrowException(v8::Exception::Error(v8::String::NewFromUtf8(isolate, ex.what()).ToLocalChecked())); }
+    catch (const py::error_already_set&) { CPythonObject::ThrowIf(isolate); }
+    // catch (...) { isolate->ThrowException(v8::Exception::Error(v8::String::NewFromUtf8(isolate, "unknown exception"))); }
+    catch (...) { isolate->ThrowException(v8::Exception::Error(v8::String::NewFromUtf8(isolate, "unknown exception").ToLocalChecked())); }
+
+    v8::Handle<v8::External> func_data = v8::External::New(isolate, new py::object(func));
+    v8::Handle<v8::FunctionTemplate> func_tmpl = v8::FunctionTemplate::New(isolate, CallStub, func_data);
+
+    return handle_scope.Escape(v8::Local<v8::FunctionTemplate>(func_tmpl));
+  }
+};
+
+std::vector< boost::shared_ptr<v8::Extension> > CExtension::s_extensions;
+
+CExtension::CExtension(const std::string& name, const std::string& source,
+                       py::object callback, py::list deps, bool autoRegister)
+  : m_deps(deps), m_registered(false)
+{
+  for (Py_ssize_t i=0; i<PyList_Size(deps.ptr()); i++)
+  {
+    py::extract<const std::string> extractor(::PyList_GetItem(deps.ptr(), i));
+
+    if (extractor.check())
+    {
+      m_depNames.push_back(extractor());
+      m_depPtrs.push_back(m_depNames.rbegin()->c_str());
+    }
+  }
+
+  m_extension.reset(new CPythonExtension(name.c_str(), source.c_str(),
+    callback, m_depPtrs.size(), m_depPtrs.empty() ? NULL : &m_depPtrs[0]));
+
+  m_extension_unique.reset(new CPythonExtension(name.c_str(), source.c_str(),
+    callback, m_depPtrs.size(), m_depPtrs.empty() ? NULL : &m_depPtrs[0]));
+
+  if (autoRegister) this->Register();
+}
+
+void CExtension::Register(void)
+{
+  // std::unique_ptr doesn't allow get/push_back, instead you should use move.
+  v8::RegisterExtension(std::move(m_extension_unique));
+
+  m_registered = true;
+
+  s_extensions.push_back(m_extension);
+}
+
+py::list CExtension::GetExtensions(void)
+{
+  v8::RegisteredExtension *ext = v8::RegisteredExtension::first_extension();
+  py::list extensions;
+
+  while (ext)
+  {
+    extensions.append(ext->extension()->name());
+
+    ext = ext->next();
+  }
+
+  return extensions;
+}
+
+#endif // SUPPORT_EXTENSION

@@ -261,7 +261,7 @@ class Version(collections.namedtuple('Version', ['major', 'minor', 'patch'] )):
 
 class JSEngine(_STPyV8.JSEngine):
 
-    v8_version = Version(*_STPyV8.JSEngine.version.split('.')[:3])
+    v8_version = Version(*_STPyV8.JSEngine.version.split('.',  maxsplit=2))
     boost_version = Version(_STPyV8.JSEngine.boost / 100000,
                             _STPyV8.JSEngine.boost / 100 % 1000,
                             _STPyV8.JSEngine.boost % 100)

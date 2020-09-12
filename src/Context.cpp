@@ -109,7 +109,6 @@ CContext::CContext(py::object global
     : m_global(global)
 {
 #if SUPPORT_EXTENSION
-    // std::auto_ptr<v8::ExtensionConfiguration> cfg;
     std::unique_ptr<v8::ExtensionConfiguration> cfg;
     std::vector<std::string> ext_names;
     std::vector<const char *> ext_ptrs;
@@ -134,9 +133,11 @@ CContext::CContext(py::object global
 
     v8::Isolate* isolate = v8::Isolate::GetCurrent();
     v8::HandleScope handle_scope(isolate);
-
+#if SUPPORT_EXTENSION
+    v8::Handle<v8::Context> context = v8::Context::New(isolate, cfg.get());
+#else
     v8::Handle<v8::Context> context = v8::Context::New(isolate);
-
+#endif // SUPPORT_EXTENSION  
     m_context.Reset(isolate, context);
 
     v8::Context::Scope context_scope(Handle());

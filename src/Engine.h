@@ -138,6 +138,8 @@ public:
   py::list GetDependencies(void) { return m_deps; }
 
   static py::list GetExtensions(void);
+  static py::list GetExtensionsSize(void);
+  static py::list GetExtensionsLists(void);  
 };
 
 #endif // SUPPORT_EXTENSION

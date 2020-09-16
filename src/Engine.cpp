@@ -90,6 +90,8 @@ void CEngine::Expose(void)
                                                                                        py::arg("dependencies") = py::list(),
                                                                                        py::arg("register") = true)))
     .add_static_property("extensions", &CExtension::GetExtensions)
+    .add_static_property("extensionssize", &CExtension::GetExtensionsSize)
+    .add_static_property("extensionslists", &CExtension::GetExtensionsLists)        
 
     .add_property("name", &CExtension::GetName, "The name of extension")
     .add_property("source", &CExtension::GetSource, "The source code of extension")
@@ -395,6 +397,35 @@ py::list CExtension::GetExtensions(void)
     ext = ext->next();
   }
 
+  return extensions;
+}
+
+py::list CExtension::GetExtensionsSize(void)
+{
+  py::list extensions;
+
+  extensions.append(s_extensions.size());
+
+  return extensions;
+}
+
+py::list CExtension::GetExtensionsLists(void)
+{
+  v8::RegisteredExtension *ext = v8::RegisteredExtension::first_extension();
+  py::list extensions;
+
+  while (ext)
+  {
+    py::list u_extensions;
+    {
+      u_extensions.append(ext->extension()->name());
+      u_extensions.append(ext->extension()->source()->data());
+      u_extensions.append(ext->extension()->auto_enable());
+
+      extensions.append(u_extensions);
+    }
+    ext = ext->next();
+  }
   return extensions;
 }
 

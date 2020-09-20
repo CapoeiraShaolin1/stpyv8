@@ -70,6 +70,7 @@ namespace py = boost::python;
 #endif
 
 #include <v8.h>
+#include <src/api/api.h>
 
 #ifdef _WIN32
 #ifdef DEBUG

@@ -33,15 +33,11 @@ void CContext::Expose(void)
 
     py::class_<CContext, boost::noncopyable>("JSContext", "JSContext is an execution context.", py::no_init)
     .def(py::init<const CContext&>("Create a new context based on a existing context"))
-#if SUPPORT_EXTENSION
+
     .def(py::init<py::object, py::list>((py::arg("global") = py::object(),
                                            py::arg("extensions") = py::list()),
                                            "Create a new context based on global object"))
-#else        
-    .def(py::init<py::object>((py::arg("global") = py::object()),
-                              "Create a new context based on global object"))
-#endif // SUPPORT_EXTENSION
-        
+
     .add_property("securityToken", &CContext::GetSecurityToken, &CContext::SetSecurityToken)
 
     .add_property("locals", &CContext::GetGlobal, "Local variables within context")
@@ -87,29 +83,22 @@ void CContext::Expose(void)
     py::objects::pointer_holder<std::shared_ptr<CContext>,CContext> > >();
 }
 
-CContext::CContext(v8::Handle<v8::Context> context)
+CContext::CContext(v8::Handle<v8::Context> context, v8::Isolate *isolate) : m_context(isolate, context)
 {
-    v8::HandleScope handle_scope(v8::Isolate::GetCurrent());
-
-    m_context.Reset(context->GetIsolate(), context);
+  // empty
 }
 
-CContext::CContext(const CContext& context)
+CContext::CContext(const CContext &context, v8::Isolate *isolate) : m_context(isolate, context.m_context)
 {
-    v8::HandleScope handle_scope(v8::Isolate::GetCurrent());
-
-    m_context.Reset(context.Handle()->GetIsolate(), context.Handle());
+  // empty
 }
 
-CContext::CContext(py::object global
-#if SUPPORT_EXTENSION
-                   , py::list extensions
-#endif // SUPPORT_EXTENSION
-)
+CContext::CContext(py::object global, py::list extensions, v8::Isolate *isolate)
     : m_global(global)
 {
+    v8::HandleScope handle_scope(isolate);
+
 #if SUPPORT_EXTENSION
-    // std::auto_ptr<v8::ExtensionConfiguration> cfg;
     std::unique_ptr<v8::ExtensionConfiguration> cfg;
     std::vector<std::string> ext_names;
     std::vector<const char *> ext_ptrs;
@@ -130,30 +119,45 @@ CContext::CContext(py::object global
     }
 
     if (!ext_ptrs.empty()) cfg.reset(new v8::ExtensionConfiguration(ext_ptrs.size(), &ext_ptrs[0]));
-#endif // SUPPORT_EXTENSION    
+#endif // SUPPORT_EXTENSION
 
-    v8::Isolate* isolate = v8::Isolate::GetCurrent();
-    v8::HandleScope handle_scope(isolate);
+    v8::TryCatch try_catch(isolate);
+    v8::Handle<v8::Context> context = v8::Context::New(isolate, cfg.get());
+  /*
+  if (context.IsEmpty())
+  {
+    if (try_catch.HasCaught())
+      CJavascriptException::ThrowIf(isolate, try_catch);
 
-    v8::Handle<v8::Context> context = v8::Context::New(isolate);
-
+    // BOOST_LOG_SEV(CIsolate::Current().Logger(), warning) << "failed to create context";
+  }
+  else
+  {
+  */
     m_context.Reset(isolate, context);
 
-    v8::Context::Scope context_scope(Handle());
+    // v8::Context::Scope context_scope(Handle());
+    v8::Context::Scope context_scope(context);
 
     if (!global.is_none())
     {
         v8::Maybe<bool> retcode =
-            Handle()->Global()->Set(context,
-                                    v8::String::NewFromUtf8(isolate, "__proto__").ToLocalChecked(),
-                                    CPythonObject::Wrap(global));
+          context->Global()->Set(context,
+                                v8::String::NewFromUtf8(isolate, "__proto__").ToLocalChecked(),
+                                CPythonObject::Wrap(global));
         if(retcode.IsNothing()) {
             //TODO we need to do something if the set call failed
         }
 
+        m_global = global;
+
         Py_DECREF(global.ptr());
     }
+  /*
+  }
+  */
 }
+
 
 py::object CContext::GetGlobal(void)
 {
@@ -171,6 +175,7 @@ py::str CContext::GetSecurityToken(void)
 
     if (token.IsEmpty()) return py::str();
 
+    // v8::String::Utf8Value str(token->ToString());
     v8::String::Utf8Value str(isolate, token->ToString(m_context.Get(isolate)).ToLocalChecked());
 
     return py::str(*str, str.length());
@@ -183,12 +188,16 @@ void CContext::SetSecurityToken(py::str token)
 
     if (token.is_none())
     {
+        // BOOST_LOG_SEV(logger(), trace) << "clear security token";
+
         Handle()->UseDefaultSecurityToken();
-    }
+      }
     else
     {
-        Handle()->SetSecurityToken(v8::String::NewFromUtf8(isolate,
-                                   py::extract<const char *>(token)()).ToLocalChecked());
+        // BOOST_LOG_SEV(logger(), trace) << "set security token " << py::extract<const char *>(token);
+
+        Handle()->SetSecurityToken(v8::String::NewFromUtf8(v8::Isolate::GetCurrent(),
+                                    py::extract<const char *>(token)()).ToLocalChecked());
     }
 }
 
@@ -233,6 +242,8 @@ py::object CContext::Evaluate(const std::string& src,
 
     CScriptPtr script = engine.Compile(src, name, line, col);
 
+    // BOOST_LOG_SEV(logger(), trace) << "eval script: " << src;
+
     return script->Run();
 }
 
@@ -243,6 +254,8 @@ py::object CContext::EvaluateW(const std::wstring& src,
     CEngine engine(v8::Isolate::GetCurrent());
 
     CScriptPtr script = engine.CompileW(src, name, line, col);
+
+    // BOOST_LOG_SEV(logger(), trace) << "eval script: " << src;
 
     return script->Run();
 }

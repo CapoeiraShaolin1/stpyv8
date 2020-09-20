@@ -11,10 +11,10 @@ try:
 except ImportError:
     from distutils.core import setup, Extension
 
+from settings import *
+
 from distutils.command.build import build
 from distutils.command.install import install
-
-from settings import *
 
 log = logging.getLogger()
 

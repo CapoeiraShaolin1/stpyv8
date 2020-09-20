@@ -3,6 +3,7 @@
 #include "Wrapper.h"
 
 #include <iostream>
+#include <string.h>
 
 #include <boost/preprocessor.hpp>
 #include <boost/thread/mutex.hpp>
@@ -71,7 +72,7 @@ void CEngine::Expose(void)
                                          py::arg("col") = -1))
     ;
 
-    py::class_<CScript, boost::noncopyable>("JSScript", "JSScript is a compiled JavaScript script.", py::no_init)
+  py::class_<CScript, boost::noncopyable>("JSScript", "JSScript is a compiled JavaScript script.", py::no_init)
     .add_property("source", &CScript::GetSource, "the source code")
 
     .def("run", &CScript::Run, "Execute the compiled code.")
@@ -81,27 +82,23 @@ void CEngine::Expose(void)
     py::objects::make_ptr_instance<CScript,
     py::objects::pointer_holder<std::shared_ptr<CScript>, CScript> > >();
 
-#if SUPPORT_EXTENSION
-
-    py::class_<CExtension, boost::noncopyable>("JSExtension", "JSExtension is a reusable script module.", py::no_init)
+  py::class_<CExtension, boost::noncopyable>("JSExtension", "JSExtension is a reusable script module.", py::no_init)
     .def(py::init<const std::string&, const std::string&, py::object, py::list, bool>((py::arg("name"),
                                                                                        py::arg("source"),
                                                                                        py::arg("callback") = py::object(),
                                                                                        py::arg("dependencies") = py::list(),
                                                                                        py::arg("register") = true)))
     .add_static_property("extensions", &CExtension::GetExtensions)
+    
+
 
     .add_property("name", &CExtension::GetName, "The name of extension")
     .add_property("source", &CExtension::GetSource, "The source code of extension")
     .add_property("dependencies", &CExtension::GetDependencies, "The extension dependencies which will be load before this extension")
-
     .add_property("autoEnable", &CExtension::IsAutoEnable, &CExtension::SetAutoEnable, "Enable the extension by default.")
-
     .add_property("registered", &CExtension::IsRegistered, "The extension has been registerd")
     .def("register", &CExtension::Register, "Register the extension")
     ;
-
-#endif // SUPPORT_EXTENSION    
 }
 
 bool CEngine::IsDead(void)
@@ -168,88 +165,96 @@ std::shared_ptr<CScript> CEngine::InternalCompile(v8::Handle<v8::String> src,
         v8::Handle<v8::Value> name,
         int line, int col)
 {
-    v8::Isolate* isolate = v8::Isolate::GetCurrent();
-    v8::HandleScope handle_scope(isolate);
-    v8::Local<v8::Context> context = isolate->GetCurrentContext();
+  v8::HandleScope handle_scope(m_isolate);
+  v8::TryCatch try_catch(m_isolate);
+  /*
+  v8::Isolate* isolate = v8::Isolate::GetCurrent();
+  v8::HandleScope handle_scope(isolate);
+  v8::Local<v8::Context> context = isolate->GetCurrentContext();
 
-    v8::TryCatch try_catch(isolate);
+  v8::TryCatch try_catch(isolate);
+  */
 
-    v8::Persistent<v8::String> script_source(m_isolate, src);
+  v8::Persistent<v8::String> script_source(m_isolate, src);
 
-    v8::MaybeLocal<v8::Script> script;
-    v8::Handle<v8::String> source = v8::Local<v8::String>::New(m_isolate, script_source);
+  v8::MaybeLocal<v8::Script> script;
 
-    Py_BEGIN_ALLOW_THREADS
+  v8::Local<v8::Integer> line_offset, column_offset;
 
-    if (line >= 0 && col >= 0)
-    {
-        v8::ScriptOrigin script_origin(name, v8::Integer::New(m_isolate, line), v8::Integer::New(m_isolate, col));
-        script = v8::Script::Compile(context, source, &script_origin);
-    }
-    else
-    {
-        v8::ScriptOrigin script_origin(name);
-        script = v8::Script::Compile(context, source, &script_origin);
-    }
+  if (line >= 0) line_offset = v8::Integer::New(m_isolate, line);
+  if (col >= 0) column_offset = v8::Integer::New(m_isolate, col);
 
-    Py_END_ALLOW_THREADS
+  Py_BEGIN_ALLOW_THREADS
 
-    if (script.IsEmpty()) CJavascriptException::ThrowIf(m_isolate, try_catch);
+  v8::ScriptOrigin script_origin(name, line_offset, column_offset);
+  v8::ScriptCompiler::Source source(src, script_origin);
 
-    return std::shared_ptr<CScript>(new CScript(m_isolate, *this, script_source, script.ToLocalChecked()));
+  script = v8::ScriptCompiler::Compile(m_isolate->GetCurrentContext(), &source);
+
+  Py_END_ALLOW_THREADS
+
+  if (script.IsEmpty()) CJavascriptException::ThrowIf(m_isolate, try_catch);
+
+  return std::shared_ptr<CScript>(new CScript(m_isolate, *this, src, script.ToLocalChecked()));
 }
 
 py::object CEngine::ExecuteScript(v8::Handle<v8::Script> script)
 {
-    v8::Isolate* isolate = v8::Isolate::GetCurrent();
-    v8::HandleScope handle_scope(isolate);
-    v8::Local<v8::Context> context = isolate->GetCurrentContext();
+  v8::HandleScope handle_scope(m_isolate);
+  v8::Local<v8::Context> context = m_isolate->GetCurrentContext();
+  v8::TryCatch try_catch(m_isolate);  
+  /*
+  v8::Isolate* isolate = v8::Isolate::GetCurrent();
+  v8::HandleScope handle_scope(isolate);
+  v8::Local<v8::Context> context = isolate->GetCurrentContext();
 
-    v8::TryCatch try_catch(isolate);
+  v8::TryCatch try_catch(isolate);
+  */
+  v8::MaybeLocal<v8::Value> result;
 
-    v8::MaybeLocal<v8::Value> result;
+  Py_BEGIN_ALLOW_THREADS
 
-    Py_BEGIN_ALLOW_THREADS
+  result = script->Run(context);
 
-    result = script->Run(context);
+  Py_END_ALLOW_THREADS
 
-    Py_END_ALLOW_THREADS
-
-    if (result.IsEmpty())
+  if (result.IsEmpty())
+  {
+    if (try_catch.HasCaught())
     {
-        if (try_catch.HasCaught())
-        {
-            if(!try_catch.CanContinue() && PyErr_OCCURRED())
-            {
-                throw py::error_already_set();
-            }
+      if(!try_catch.CanContinue() && PyErr_OCCURRED())
+      {
+        throw py::error_already_set();
+      }
 
-            CJavascriptException::ThrowIf(m_isolate, try_catch);
-        }
-
-        result = v8::Null(m_isolate);
+      CJavascriptException::ThrowIf(m_isolate, try_catch);
     }
 
-    return CJavascriptObject::Wrap(result.ToLocalChecked());
+    result = v8::Null(m_isolate);
+  }
+
+  return CJavascriptObject::Wrap(result.ToLocalChecked());
 }
+
+
 
 const std::string CScript::GetSource(void) const
 {
-    v8::HandleScope handle_scope(m_isolate);
+  v8::HandleScope handle_scope(m_isolate);
 
-    v8::String::Utf8Value source(m_isolate, Source());
+  v8::String::Utf8Value source(m_isolate, Source());
 
-    return std::string(*source, source.length());
+  return std::string(*source, source.length());
 }
 
 py::object CScript::Run(void)
 {
-    v8::HandleScope handle_scope(m_isolate);
+  v8::HandleScope handle_scope(m_isolate);
 
-    return m_engine.ExecuteScript(Script());
+  return m_engine.ExecuteScript(Script());
 }
 
-#if SUPPORT_EXTENSION
+#ifdef SUPPORT_EXTENSION
 
 class CPythonExtension : public v8::Extension
 {
@@ -287,7 +292,6 @@ class CPythonExtension : public v8::Extension
                           CJavascriptObject::Wrap(args[4]), CJavascriptObject::Wrap(args[5]),
                           CJavascriptObject::Wrap(args[7]), CJavascriptObject::Wrap(args[8])); break;
     default:
-      // args.GetIsolate()->ThrowException(v8::Exception::Error(v8::String::NewFromUtf8(args.GetIsolate(), "too many arguments")));
       args.GetIsolate()->ThrowException(v8::Exception::Error(v8::String::NewFromUtf8(args.GetIsolate(), "too many arguments").ToLocalChecked()));
       break;
     }
@@ -304,7 +308,7 @@ class CPythonExtension : public v8::Extension
   }
 public:
   CPythonExtension(const char *name, const char *source, py::object callback, int dep_count, const char**deps)
-    : v8::Extension(strdup(name), strdup(source), dep_count, deps), m_callback(callback)
+    : v8::Extension(name, source, dep_count, deps), m_callback(callback)
   {
 
   }
@@ -315,7 +319,6 @@ public:
     CPythonGIL python_gil;
 
     py::object func;
-    // v8::String::Utf8Value func_name(name);
     v8::String::Utf8Value func_name(isolate, name);
     std::string func_name_str(*func_name, func_name.length());
 
@@ -334,10 +337,8 @@ public:
         return v8::Handle<v8::FunctionTemplate>();
       }
     }
-    // catch (const std::exception& ex) { isolate->ThrowException(v8::Exception::Error(v8::String::NewFromUtf8(isolate, ex.what()))); }
     catch (const std::exception& ex) { isolate->ThrowException(v8::Exception::Error(v8::String::NewFromUtf8(isolate, ex.what()).ToLocalChecked())); }
     catch (const py::error_already_set&) { CPythonObject::ThrowIf(isolate); }
-    // catch (...) { isolate->ThrowException(v8::Exception::Error(v8::String::NewFromUtf8(isolate, "unknown exception"))); }
     catch (...) { isolate->ThrowException(v8::Exception::Error(v8::String::NewFromUtf8(isolate, "unknown exception").ToLocalChecked())); }
 
     v8::Handle<v8::External> func_data = v8::External::New(isolate, new py::object(func));
@@ -347,11 +348,11 @@ public:
   }
 };
 
-std::vector< boost::shared_ptr<v8::Extension> > CExtension::s_extensions;
+// std::vector< boost::shared_ptr<v8::Extension> > CExtension::s_extensions;
 
 CExtension::CExtension(const std::string& name, const std::string& source,
                        py::object callback, py::list deps, bool autoRegister)
-  : m_deps(deps), m_registered(false)
+  : m_name(name), m_source(source), m_deps(deps), m_registered(false)
 {
   for (Py_ssize_t i=0; i<PyList_Size(deps.ptr()); i++)
   {
@@ -364,24 +365,96 @@ CExtension::CExtension(const std::string& name, const std::string& source,
     }
   }
 
-  m_extension.reset(new CPythonExtension(name.c_str(), source.c_str(),
+  m_extension.reset(new CPythonExtension(m_name.c_str(), m_source.c_str(),
     callback, m_depPtrs.size(), m_depPtrs.empty() ? NULL : &m_depPtrs[0]));
 
-  m_extension_unique.reset(new CPythonExtension(name.c_str(), source.c_str(),
+  m_extension_unique.reset(new CPythonExtension(m_name.c_str(), m_source.c_str(),
     callback, m_depPtrs.size(), m_depPtrs.empty() ? NULL : &m_depPtrs[0]));
 
-  if (autoRegister) this->Register();
+  if (autoRegister) Register();
 }
 
 void CExtension::Register(void)
 {
-  // std::unique_ptr doesn't allow get/push_back, instead you should use move.
-  v8::RegisterExtension(std::move(m_extension_unique));
+  v8::RegisteredExtension *ext = v8::RegisteredExtension::first_extension();
+  py::list extensions;
 
-  m_registered = true;
+  // m_registered = false;
 
-  s_extensions.push_back(m_extension);
+  if ((m_extension) && (m_extension_unique))
+  {
+    std::string n = m_extension->name();
+    if(n.size())  
+    {
+      while (ext)
+      {
+        if (n.compare((std::string) ext->extension()->name()) == 0)
+        {
+          // same name has been already existed.
+          m_registered = true;
+          return; 
+        }
+        ext = ext->next();
+      }  
+
+      v8::RegisterExtension(std::move(m_extension_unique));
+
+      m_registered = true;
+
+      // s_extensions.push_back(m_extension);
+    }
+  }
 }
+
+void CExtension::SetAutoEnable(bool value)
+{
+  v8::RegisteredExtension *ext = v8::RegisteredExtension::first_extension();
+  py::list extensions;
+
+  if (m_extension)
+  {
+    std::string n = m_extension->name();
+    if(n.size())  
+    {
+      while (ext)
+      {
+        if (n.compare((std::string) ext->extension()->name()) == 0)
+        {
+          m_extension->set_auto_enable(value);
+          ext->extension()->set_auto_enable(value);
+          break;
+        }
+        ext = ext->next();
+      }  
+    }
+  }
+}
+
+
+bool CExtension::IsAutoEnable(void)
+{
+  v8::RegisteredExtension *ext = v8::RegisteredExtension::first_extension();
+
+  bool m_auto_enable = false;
+  if (m_extension)
+  {
+    std::string n = m_extension->name();
+    if(n.size())
+    {
+      while (ext)
+      {
+        if (n.compare((std::string) ext->extension()->name()) == 0)
+        {
+          m_auto_enable = ext->extension()->auto_enable();
+          break;
+        }
+        ext = ext->next();
+      }  
+    }
+  }
+  return m_auto_enable;
+}
+
 
 py::list CExtension::GetExtensions(void)
 {
@@ -390,8 +463,12 @@ py::list CExtension::GetExtensions(void)
 
   while (ext)
   {
-    extensions.append(ext->extension()->name());
-
+    // if (ext->extension()->name())
+    std::string n = ext->extension()->name();
+    if(n.size())
+    {
+      extensions.append(ext->extension()->name());
+    }
     ext = ext->next();
   }
 

@@ -119,6 +119,7 @@ CContext::CContext(py::object global, py::list extensions, v8::Isolate *isolate)
     }
 
     if (!ext_ptrs.empty()) cfg.reset(new v8::ExtensionConfiguration(ext_ptrs.size(), &ext_ptrs[0]));
+<<<<<<< HEAD
 #endif // SUPPORT_EXTENSION
 
     v8::TryCatch try_catch(isolate);
@@ -134,6 +135,17 @@ CContext::CContext(py::object global, py::list extensions, v8::Isolate *isolate)
   else
   {
   */
+=======
+#endif // SUPPORT_EXTENSION    
+
+    v8::Isolate* isolate = v8::Isolate::GetCurrent();
+    v8::HandleScope handle_scope(isolate);
+#if SUPPORT_EXTENSION
+    v8::Handle<v8::Context> context = v8::Context::New(isolate, cfg.get());
+#else
+    v8::Handle<v8::Context> context = v8::Context::New(isolate);
+#endif // SUPPORT_EXTENSION  
+>>>>>>> d20f062bf39d6d7f8dcb8190159c8750ffa19ddc
     m_context.Reset(isolate, context);
 
     // v8::Context::Scope context_scope(Handle());

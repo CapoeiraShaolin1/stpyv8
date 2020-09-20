@@ -89,8 +89,13 @@ void CEngine::Expose(void)
                                                                                        py::arg("dependencies") = py::list(),
                                                                                        py::arg("register") = true)))
     .add_static_property("extensions", &CExtension::GetExtensions)
+<<<<<<< HEAD
     
 
+=======
+    .add_static_property("extensionssize", &CExtension::GetExtensionsSize)
+    .add_static_property("extensionslists", &CExtension::GetExtensionsLists)        
+>>>>>>> d20f062bf39d6d7f8dcb8190159c8750ffa19ddc
 
     .add_property("name", &CExtension::GetName, "The name of extension")
     .add_property("source", &CExtension::GetSource, "The source code of extension")
@@ -475,4 +480,37 @@ py::list CExtension::GetExtensions(void)
   return extensions;
 }
 
+<<<<<<< HEAD
 #endif // SUPPORT_EXTENSION
+=======
+py::list CExtension::GetExtensionsSize(void)
+{
+  py::list extensions;
+
+  extensions.append(s_extensions.size());
+
+  return extensions;
+}
+
+py::list CExtension::GetExtensionsLists(void)
+{
+  v8::RegisteredExtension *ext = v8::RegisteredExtension::first_extension();
+  py::list extensions;
+
+  while (ext)
+  {
+    py::list u_extensions;
+    {
+      u_extensions.append(ext->extension()->name());
+      u_extensions.append(ext->extension()->source()->data());
+      u_extensions.append(ext->extension()->auto_enable());
+
+      extensions.append(u_extensions);
+    }
+    ext = ext->next();
+  }
+  return extensions;
+}
+
+#endif // SUPPORT_EXTENSION
+>>>>>>> d20f062bf39d6d7f8dcb8190159c8750ffa19ddc

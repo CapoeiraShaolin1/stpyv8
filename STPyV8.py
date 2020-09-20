@@ -289,9 +289,15 @@ class Version(collections.namedtuple('Version', ['major', 'minor', 'patch'] )):
 
 class JSEngine(_STPyV8.JSEngine):
 
+<<<<<<< HEAD
     v8_version = Version(*_STPyV8.JSEngine.version.split('.', maxsplit=2))
     boost_version = Version(int(_STPyV8.JSEngine.boost / 100000),
                             int(_STPyV8.JSEngine.boost / 100 % 1000),
+=======
+    v8_version = Version(*_STPyV8.JSEngine.version.split('.',  maxsplit=2))
+    boost_version = Version(_STPyV8.JSEngine.boost / 100000,
+                            _STPyV8.JSEngine.boost / 100 % 1000,
+>>>>>>> d20f062bf39d6d7f8dcb8190159c8750ffa19ddc
                             _STPyV8.JSEngine.boost % 100)
 
     def __init__(self):

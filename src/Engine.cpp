@@ -82,6 +82,8 @@ void CEngine::Expose(void)
     py::objects::make_ptr_instance<CScript,
     py::objects::pointer_holder<std::shared_ptr<CScript>, CScript> > >();
 
+#ifdef SUPPORT_EXTENSION
+
   py::class_<CExtension, boost::noncopyable>("JSExtension", "JSExtension is a reusable script module.", py::no_init)
     .def(py::init<const std::string&, const std::string&, py::object, py::list, bool>((py::arg("name"),
                                                                                        py::arg("source"),
@@ -89,13 +91,8 @@ void CEngine::Expose(void)
                                                                                        py::arg("dependencies") = py::list(),
                                                                                        py::arg("register") = true)))
     .add_static_property("extensions", &CExtension::GetExtensions)
-<<<<<<< HEAD
     
 
-=======
-    .add_static_property("extensionssize", &CExtension::GetExtensionsSize)
-    .add_static_property("extensionslists", &CExtension::GetExtensionsLists)        
->>>>>>> d20f062bf39d6d7f8dcb8190159c8750ffa19ddc
 
     .add_property("name", &CExtension::GetName, "The name of extension")
     .add_property("source", &CExtension::GetSource, "The source code of extension")
@@ -103,7 +100,15 @@ void CEngine::Expose(void)
     .add_property("autoEnable", &CExtension::IsAutoEnable, &CExtension::SetAutoEnable, "Enable the extension by default.")
     .add_property("registered", &CExtension::IsRegistered, "The extension has been registerd")
     .def("register", &CExtension::Register, "Register the extension")
+
+
+    .add_static_property("extensionslists", &CExtension::GetExtensionsLists, "lists of [name, source, auto_enable]")
+    
+    .add_property("extensionssize", &CExtension::GetExtensionsSize, "number of registered extensions")
+    .add_property("extensionsdeconstruct", &CExtension::deconstructExtensionsAll)
     ;
+
+#endif
 }
 
 bool CEngine::IsDead(void)
@@ -480,15 +485,24 @@ py::list CExtension::GetExtensions(void)
   return extensions;
 }
 
-<<<<<<< HEAD
-#endif // SUPPORT_EXTENSION
-=======
 py::list CExtension::GetExtensionsSize(void)
 {
+  v8::RegisteredExtension *ext = v8::RegisteredExtension::first_extension();
   py::list extensions;
+  int nmsize = 0;
 
-  extensions.append(s_extensions.size());
+  while (ext)
+  {
+    // if (ext->extension()->name())
+    std::string n = ext->extension()->name();
+    if(n.size())
+    {
+      ++nmsize;
+    }
+    ext = ext->next();
+  }
 
+  extensions.append(nmsize);
   return extensions;
 }
 
@@ -499,18 +513,20 @@ py::list CExtension::GetExtensionsLists(void)
 
   while (ext)
   {
-    py::list u_extensions;
+    std::string n = ext->extension()->name();
+    if(n.size())
     {
+      py::list u_extensions;        
       u_extensions.append(ext->extension()->name());
       u_extensions.append(ext->extension()->source()->data());
       u_extensions.append(ext->extension()->auto_enable());
 
       extensions.append(u_extensions);
-    }
+      }
+
     ext = ext->next();
   }
   return extensions;
 }
 
 #endif // SUPPORT_EXTENSION
->>>>>>> d20f062bf39d6d7f8dcb8190159c8750ffa19ddc

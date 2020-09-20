@@ -113,5 +113,13 @@ public:
         return v8::Isolate::GetCurrent()->InContext();
     }
 
+    /*
+    static logger_t &Logger(v8::Isolate *isolate = v8::Isolate::GetCurrent())
+    {
+      v8::HandleScope handle_scope(isolate);
+
+      return GetLogger(isolate->GetCurrentContext());
+    }
+    */
     static void Expose(void);
 };

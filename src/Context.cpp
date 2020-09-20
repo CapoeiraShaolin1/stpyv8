@@ -33,10 +33,14 @@ void CContext::Expose(void)
 
     py::class_<CContext, boost::noncopyable>("JSContext", "JSContext is an execution context.", py::no_init)
     .def(py::init<const CContext&>("Create a new context based on a existing context"))
-
+#if SUPPORT_EXTENSION
     .def(py::init<py::object, py::list>((py::arg("global") = py::object(),
                                            py::arg("extensions") = py::list()),
                                            "Create a new context based on global object"))
+#else
+    .def(py::init<py::object>((py::arg("global") = py::object()),
+                              "Create a new context based on global object"))
+#endif // SUPPORT_EXTENSION
 
     .add_property("securityToken", &CContext::GetSecurityToken, &CContext::SetSecurityToken)
 
@@ -66,7 +70,10 @@ void CContext::Expose(void)
     .def("leave", &CContext::Leave, "Exit this context. "
          "Exiting the current context restores the context "
          "that was in place when entering the current context.")
-
+/*
+    .def("dispose", &CContext::Dispose, "Dispose this context.",
+          "Force to dispose a context, release all resources.")
+*/
     .def("__bool__", &CContext::IsEntered, "the context has been entered.")
     ;
 
@@ -81,16 +88,21 @@ void CContext::Expose(void)
     py::objects::class_value_wrapper<std::shared_ptr<CContext>,
     py::objects::make_ptr_instance<CContext,
     py::objects::pointer_holder<std::shared_ptr<CContext>,CContext> > >();
+/*
+    py::objects::class_value_wrapper<CContextPtr,
+    py::objects::make_ptr_instance<CContext,
+    py::objects::pointer_holder<CContextPtr, CContext>>>();
+*/
 }
 
 CContext::CContext(v8::Handle<v8::Context> context, v8::Isolate *isolate) : m_context(isolate, context)
 {
-  // empty
+  // BOOST_LOG_SEV(logger(), trace) << "context wrapped";
 }
 
 CContext::CContext(const CContext &context, v8::Isolate *isolate) : m_context(isolate, context.m_context)
 {
-  // empty
+  // BOOST_LOG_SEV(logger(), trace) << "context copied";
 }
 
 CContext::CContext(py::object global, py::list extensions, v8::Isolate *isolate)
@@ -119,7 +131,6 @@ CContext::CContext(py::object global, py::list extensions, v8::Isolate *isolate)
     }
 
     if (!ext_ptrs.empty()) cfg.reset(new v8::ExtensionConfiguration(ext_ptrs.size(), &ext_ptrs[0]));
-<<<<<<< HEAD
 #endif // SUPPORT_EXTENSION
 
     v8::TryCatch try_catch(isolate);
@@ -135,21 +146,12 @@ CContext::CContext(py::object global, py::list extensions, v8::Isolate *isolate)
   else
   {
   */
-=======
-#endif // SUPPORT_EXTENSION    
-
-    v8::Isolate* isolate = v8::Isolate::GetCurrent();
-    v8::HandleScope handle_scope(isolate);
-#if SUPPORT_EXTENSION
-    v8::Handle<v8::Context> context = v8::Context::New(isolate, cfg.get());
-#else
-    v8::Handle<v8::Context> context = v8::Context::New(isolate);
-#endif // SUPPORT_EXTENSION  
->>>>>>> d20f062bf39d6d7f8dcb8190159c8750ffa19ddc
     m_context.Reset(isolate, context);
 
     // v8::Context::Scope context_scope(Handle());
     v8::Context::Scope context_scope(context);
+
+    // BOOST_LOG_SEV(logger(), trace) << "context created";
 
     if (!global.is_none())
     {

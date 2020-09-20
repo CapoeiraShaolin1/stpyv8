@@ -106,6 +106,7 @@ public:
   py::object Run(void);
 };
 
+#ifdef SUPPORT_EXTENSION
 
 class CExtension
 {
@@ -135,7 +136,9 @@ public:
 
   void deconstructExtensionsAll(void) { v8::RegisteredExtension::UnregisterAll(); }
   
-  static py::list GetExtensions(void);
   static py::list GetExtensionsSize(void);
-  static py::list GetExtensionsLists(void);  
+  static py::list GetExtensions(void);
+  static py::list GetExtensionsLists(void);
 };
+
+#endif // SUPPORT_EXTENSION

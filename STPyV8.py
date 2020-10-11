@@ -14,7 +14,7 @@ import json
 
 from STPyV8 import _STPyV8
 
-__version__ = '0.1'
+__version__ = _STPyV8.JSEngine.version
 
 __all__ = ["ReadOnly",
            "DontEnum",
@@ -121,29 +121,6 @@ JSPlatform  = _STPyV8.JSPlatform
 JS_ESCAPABLE = re.compile(r'([^\x00-\x7f])')
 HAS_UTF8 = re.compile(r'[\x80-\xff]')
 
-#
-# # contribute by e.generalov
-#
-# def _js_escape_unicode_re_callack(match):
-#     n = ord(match.group(0))
-#     if n < 0x10000:
-#         return '\\u%04x' % (n,)
-#     else:
-#         # surrogate pair
-#         n -= 0x10000
-#         s1 = 0xd800 | ((n >> 10) & 0x3ff)
-#         s2 = 0xdc00 | (n & 0x3ff)
-#         return '\\u%04x\\u%04x' % (s1, s2)
-#
-# def js_escape_unicode(text):
-#     """Return an ASCII-only representation of a JavaScript string"""
-#     if isinstance(text, str):
-#         if HAS_UTF8.search(text) is None:
-#             return text
-# 
-#         text = text.decode('UTF-8')
-# 
-#     return str(JS_ESCAPABLE.sub(_js_escape_unicode_re_callack, text))
 
 
 class JSExtension(_STPyV8.JSExtension):

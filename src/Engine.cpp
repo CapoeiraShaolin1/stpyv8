@@ -72,7 +72,7 @@ void CEngine::Expose(void)
                                          py::arg("col") = -1))
     ;
 
-  py::class_<CScript, boost::noncopyable>("JSScript", "JSScript is a compiled JavaScript script.", py::no_init)
+    py::class_<CScript, boost::noncopyable>("JSScript", "JSScript is a compiled JavaScript script.", py::no_init)
     .add_property("source", &CScript::GetSource, "the source code")
 
     .def("run", &CScript::Run, "Execute the compiled code.")

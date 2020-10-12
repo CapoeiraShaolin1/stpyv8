@@ -521,8 +521,7 @@ class HtmlWindow(PyV8.JSClass):
     def fireOnloadEvents(self):
         for tag in self._findAll('script'):
             self.evalScript(tag.string, tag=tag)
-        
-        # print(type(self.doc.doc.body),'\n', self.doc.doc.body)
+
         body = self.doc.doc.body    # TODO
 
         if body and ('onload' in str(body.tag)):

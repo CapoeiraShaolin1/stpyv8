@@ -7,7 +7,7 @@ from __future__ import print_function
 import re
 import collections.abc
 
-import _STPyV8
+from STPyV8 import _STPyV8
 
 __version__ = _STPyV8.JSEngine.version
 

@@ -7,9 +7,9 @@ import shutil
 import logging
 
 try:
-    from setuptools import setup, Extension
+    from setuptools import setup, find_packages, Extension
 except ImportError:
-    from distutils.core import setup, Extension
+    from distutils.core import setup, find_packages, Extension
 
 from distutils.command.build import build
 from distutils.command.install import install
@@ -99,12 +99,12 @@ def checkout_v8():
 
 def build_v8():
     exec_cmd(os.path.join(DEPOT_HOME, 'gn'),
-             "gen out.gn/x64.release.sample --args='{}'".format(GN_ARGS),
+             "gen out.gn/arm64.release --args='{}'".format(GN_ARGS),
              cwd = V8_HOME,
              msg = "Generate build scripts for V8 (v{})".format(V8_GIT_TAG))
 
     exec_cmd(os.path.join(DEPOT_HOME, 'ninja'),
-             "-C out.gn/x64.release.sample v8_monolith",
+             "-C out.gn/arm64.release v8_monolith",
              cwd = V8_HOME,
              msg = "Build V8 with ninja")
 
@@ -158,13 +158,13 @@ class stpyv8_install(install):
 
         if icu_data_folder:
             os.makedirs(icu_data_folder, exist_ok = True)
-            shutil.copy(os.path.join(V8_HOME, "out.gn/x64.release.sample/icudtl.dat"),
+            shutil.copy(os.path.join(V8_HOME, "out.gn/arm64.release/icudtl.dat"),
                         icu_data_folder)
 
         install.run(self)
 
 
-stpyv8 = Extension(name               = "_STPyV8",
+stpyv8 = Extension(name               = "STPyV8._STPyV8",
                    sources            = [os.path.join("src", source) for source in source_files],
                    define_macros      = macros,
                    include_dirs       = include_dirs,
@@ -177,11 +177,13 @@ stpyv8 = Extension(name               = "_STPyV8",
 setup(name         = "stpyv8",
       version      = STPYV8_VERSION,
       description  = "Python Wrapper for Google V8 Engine",
-      platforms    = "x86",
+      platforms    = "arm64",
       author       = "Philip Syme, Angelo Dell'Aera",
       url          = "https://github.com/area1/stpyv8",
       license      = "Apache License 2.0",
-      py_modules   = ["STPyV8"],
+      packages     = find_packages(),
+      # py_modules   = ["STPyV8"],
+      data_files   = [('STPyV8/examples', ['STPyV8/examples/simple.js'])],
       ext_modules  = [stpyv8],
       classifiers  = [
         "Development Status :: 4 - Beta",

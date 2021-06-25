@@ -26,6 +26,15 @@ else:
 
 os.environ['PATH'] = "{}:{}".format(os.environ['PATH'], DEPOT_HOME)
 
+"""
+os architecture  "arm64", "x86"
+"""
+os_uname = os.uname()
+if sys.version_info.major == 3:
+    os_arch = 'arm64' if 'arm64' in os_uname.machine else 'x86'
+else:
+    os_arch = 'arm64' if any(['arm64' in x for x in os_uname]) else 'x86'
+
 gn_args = {
 # "v8_use_snapshot"                    : "true",
   "v8_deprecation_warnings"            : "true",
@@ -39,8 +48,8 @@ gn_args = {
   "v8_use_external_startup_data"       : "false",
   "v8_enable_pointer_compression"      : "false",
   "v8_enable_31bit_smis_on_64bit_arch" : "false",
-  "target_cpu" : "\"arm64\"",
-  "v8_target_cpu" : "\"arm64\""
+  "target_cpu"    : "\"{}\"".format(os_arch),
+  "v8_target_cpu" : "\"{}\"".format(os_arch)
 }
 
 GN_ARGS = ' '.join("{}={}".format(key, gn_args[key]) for key in gn_args)
@@ -65,7 +74,7 @@ extra_compile_args = []
 extra_link_args    = []
 
 include_dirs.append(os.path.join(V8_HOME, 'include'))
-library_dirs.append(os.path.join(V8_HOME, 'out.gn/arm64.release/obj/'))
+library_dirs.append(os.path.join(V8_HOME, 'out.gn/{}.release/obj/'.format(os_arch)))
 
 BOOST_PYTHON_LIB_SHORT = "boost_python{}".format(sys.version_info.major)
 BOOST_PYTHON_LIB_LONG  = "boost_python{}{}".format(sys.version_info.major, sys.version_info.minor)
@@ -112,7 +121,7 @@ if os.name in ("nt", ):
     library_dirs       += os.environ["LIB"].split(';')
     libraries          += ["winmm", "ws2_32"]
     extra_compile_args += ["/O2", "/GL", "/MT", "/EHsc", "/Gy", "/Zi"]
-    extra_link_args    += ["/DLL", "/OPT:REF", "/OPT:ICF", "/MACHINE:arm64"]
+    extra_link_args    += ["/DLL", "/OPT:REF", "/OPT:ICF", "/MACHINE:{}".format(os_arch)]
 elif os.name in ("posix", ):
     libraries = ["boost_system", "v8_monolith", STPYV8_BOOST_PYTHON]
     extra_compile_args.append('-Wl,-rpath,/opt/local/lib')  # for BigSur

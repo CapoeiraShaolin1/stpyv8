@@ -18,6 +18,15 @@ from settings import *
 
 log = logging.getLogger()
 
+"""
+os architecture  "arm64", "x86"
+"""
+os_uname = os.uname()
+if sys.version_info.major == 3:
+    os_arch = 'arm64' if 'arm64' in os_uname.machine else 'x86'
+else:
+    os_arch = 'arm64' if any(['arm64' in x for x in os_uname]) else 'x86'
+
 
 def exec_cmd(cmdline, *args, **kwargs):
     msg    = kwargs.get('msg')
@@ -99,12 +108,12 @@ def checkout_v8():
 
 def build_v8():
     exec_cmd(os.path.join(DEPOT_HOME, 'gn'),
-             "gen out.gn/arm64.release --args='{}'".format(GN_ARGS),
+             "gen out.gn/{}.release --args='{}'".format(os_arch, GN_ARGS),
              cwd = V8_HOME,
              msg = "Generate build scripts for V8 (v{})".format(V8_GIT_TAG))
 
     exec_cmd(os.path.join(DEPOT_HOME, 'ninja'),
-             "-C out.gn/arm64.release v8_monolith",
+             "-C out.gn/{}.release v8_monolith".format(os_arch),
              cwd = V8_HOME,
              msg = "Build V8 with ninja")
 
@@ -158,7 +167,7 @@ class stpyv8_install(install):
 
         if icu_data_folder:
             os.makedirs(icu_data_folder, exist_ok = True)
-            shutil.copy(os.path.join(V8_HOME, "out.gn/arm64.release/icudtl.dat"),
+            shutil.copy(os.path.join(V8_HOME, "out.gn/{}.release/icudtl.dat".format(os_arch)),
                         icu_data_folder)
 
         install.run(self)
@@ -177,7 +186,7 @@ stpyv8 = Extension(name               = "STPyV8._STPyV8",
 setup(name         = "stpyv8",
       version      = STPYV8_VERSION,
       description  = "Python Wrapper for Google V8 Engine",
-      platforms    = "arm64",
+      platforms    = os_arch,
       author       = "Philip Syme, Angelo Dell'Aera",
       url          = "https://github.com/area1/stpyv8",
       license      = "Apache License 2.0",

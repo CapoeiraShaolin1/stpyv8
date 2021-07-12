@@ -7,8 +7,10 @@ DEPOT_HOME  = os.environ.get('DEPOT_HOME', os.path.join(STPYV8_HOME, 'depot_tool
 V8_HOME     = os.environ.get('V8_HOME', os.path.join(STPYV8_HOME, 'v8'))
 
 V8_GIT_URL        = "https://chromium.googlesource.com/v8/v8.git"
-V8_GIT_TAG_STABLE = "8.5.210.20"  # require icu 67
+
+# V8_GIT_TAG_STABLE = "8.5.210.20"  # require icu 67
 # V8_GIT_TAG_STABLE = "8.3.110.13"
+V8_GIT_TAG_STABLE = "9.1.269.36"
 V8_GIT_TAG_MASTER = "master"
 V8_GIT_TAG        = V8_GIT_TAG_STABLE
 DEPOT_GIT_URL     = "https://chromium.googlesource.com/chromium/tools/depot_tools.git"
@@ -27,9 +29,19 @@ else:
 
 os.environ['PATH'] = "{}:{}".format(os.environ['PATH'], DEPOT_HOME)
 
+"""
+os architecture  "arm64", "x86"
+"""
+os_uname = os.uname()
+if sys.version_info.major == 3:
+    os_arch = 'arm64' if 'arm64' in os_uname.machine else 'x86'
+else:
+    os_arch = 'arm64' if any(['arm64' in x for x in os_uname]) else 'x86'
+
 gn_args = {
 # "v8_use_snapshot"                    : "true",
-  "v8_use_external_startup_data"       : "true",
+  "v8_deprecation_warnings"            : "true",
+  "v8_imminent_deprecation_warnings"   : "true",
   "v8_enable_disassembler"             : "false",
   "v8_enable_i18n_support"             : "true",
   "is_component_build"                 : "false",
@@ -38,7 +50,9 @@ gn_args = {
   "v8_monolithic"                      : "true",
 # "v8_use_external_startup_data"       : "false",
   "v8_enable_pointer_compression"      : "false",
-  "v8_enable_31bit_smis_on_64bit_arch" : "false"
+  "v8_enable_31bit_smis_on_64bit_arch" : "false",
+  "target_cpu"    : "\"{}\"".format(os_arch),
+  "v8_target_cpu" : "\"{}\"".format(os_arch)
 }
 
 GN_ARGS = ' '.join("{}={}".format(key, gn_args[key]) for key in gn_args)
@@ -63,29 +77,59 @@ extra_compile_args = []
 extra_link_args    = []
 
 include_dirs.append(os.path.join(V8_HOME, 'include'))
-library_dirs.append(os.path.join(V8_HOME, 'out.gn/x64.release.sample/obj/'))
+library_dirs.append(os.path.join(V8_HOME, 'out.gn/{}.release/obj/'.format(os_arch)))
+
+BOOST_PYTHON_LIB_SHORT = "boost_python{}".format(sys.version_info.major)
+BOOST_PYTHON_LIB_LONG  = "boost_python{}{}".format(sys.version_info.major, sys.version_info.minor)
+
+BOOST_PYTHON_UBUNTU_MATRIX = {
+    'default' : BOOST_PYTHON_LIB_LONG,
+    '18.04'   : BOOST_PYTHON_LIB_SHORT,
+    '20.04'   : BOOST_PYTHON_LIB_LONG
+}
 
 def get_libboost_python_name():
-    ubuntu_platforms = ('ubuntu', )
-    current_platform = platform.platform().lower()
+    if not os.path.exists("/etc/lsb-release"):
+        return BOOST_PYTHON_UBUNTU_MATRIX['default']
 
-    if any(p in current_platform for p in ubuntu_platforms):
-        return "boost_python{}".format(sys.version_info.major)
+    platform_info = dict()
 
-    return "boost_python{}{}".format(sys.version_info.major, sys.version_info.minor)
+    with open("/etc/lsb-release", "r") as fd:
+        for line in fd.readlines():
+            s = line.strip()
+            p = s.split("=")
 
-STPYV8_BOOST_PYTHON = os.environ.get('STPYV8_BOOST_PYTHON', get_libboost_python_name())
+            if len(p) < 2:
+                continue
+
+            platform_info[p[0]] = p[1]
+
+    if 'DISTRIB_ID' not in platform_info:
+        return BOOST_PYTHON_UBUNTU_MATRIX['default']
+
+    if platform_info['DISTRIB_ID'].lower() not in ('ubuntu', ):
+        return BOOST_PYTHON_UBUNTU_MATRIX['default']
+
+    release = platform_info['DISTRIB_RELEASE']
+
+    if release not in BOOST_PYTHON_UBUNTU_MATRIX:
+        return BOOST_PYTHON_UBUNTU_MATRIX['default']
+
+    return BOOST_PYTHON_UBUNTU_MATRIX[release]
+
+STPYV8_BOOST_PYTHON = os.getenv('STPYV8_BOOST_PYTHON', default = get_libboost_python_name())
 
 if os.name in ("nt", ):
     include_dirs       += os.environ["INCLUDE"].split(';')
     library_dirs       += os.environ["LIB"].split(';')
     libraries          += ["winmm", "ws2_32"]
     extra_compile_args += ["/O2", "/GL", "/MT", "/EHsc", "/Gy", "/Zi"]
-    extra_link_args    += ["/DLL", "/OPT:REF", "/OPT:ICF", "/MACHINE:X86"]
+    extra_link_args    += ["/DLL", "/OPT:REF", "/OPT:ICF", "/MACHINE:{}".format(os_arch)]
 elif os.name in ("posix", ):
     libraries = ["boost_system", "v8_monolith", STPYV8_BOOST_PYTHON]
-    library_dirs.append('/usr/local/lib')
+
     extra_compile_args.append('-std=c++14')
+    extra_compile_args.append('-Wl,-rpath,/opt/local/lib')  # for BigSur
 
     if platform.system() in ('Linux', ):
         libraries.append("rt")

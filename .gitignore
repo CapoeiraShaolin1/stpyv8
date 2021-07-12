@@ -8,4 +8,8 @@ depot_tools
 v8
 *.pyc
 *.cmake
+<<<<<<< HEAD
 .github
+=======
+.DS_Store
+>>>>>>> mac-m1

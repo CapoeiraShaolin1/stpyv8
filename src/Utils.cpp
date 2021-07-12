@@ -81,7 +81,7 @@ v8::Handle<v8::String> ToString(py::object str)
                    .ToLocalChecked());
 
 #else
-        Py_ssize_t len = PyUnicode_GET_SIZE(str.ptr());
+        Py_ssize_t len = PyUnicode_GET_LENGTH(str.ptr());
         const uint32_t *p = reinterpret_cast<const uint32_t *>(PyUnicode_AS_UNICODE(str.ptr()));
 
         std::vector<uint16_t> data(len+1);

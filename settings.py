@@ -48,7 +48,7 @@ gn_args = {
   "is_debug"                           : "false",
   "use_custom_libcxx"                  : "false",
   "v8_monolithic"                      : "true",
-# "v8_use_external_startup_data"       : "false",
+  "v8_use_external_startup_data"       : "false",
   "v8_enable_pointer_compression"      : "false",
   "v8_enable_31bit_smis_on_64bit_arch" : "false",
   "target_cpu"    : "\"{}\"".format(os_arch),
